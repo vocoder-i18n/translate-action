@@ -1,0 +1,26 @@
+name: 'Vocoder Translate'
+description: 'Translate i18n strings via Vocoder before build'
+branding:
+  icon: 'globe'
+  color: 'blue'
+inputs:
+  api-key:
+    description: 'Vocoder project API key'
+    required: true
+  working-directory:
+    description: 'Path to the app directory containing vocoder.config.ts'
+    required: false
+    default: '.'
+  cli-version:
+    description: 'Pin a specific @vocoder/cli version (default: latest)'
+    required: false
+    default: 'latest'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Vocoder translate
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        VOCODER_API_KEY: ${{ inputs.api-key }}
+      run: npx --yes @vocoder/cli@${{ inputs.cli-version }} translate
