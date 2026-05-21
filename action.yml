@@ -7,14 +7,10 @@ inputs:
   api-key:
     description: 'Vocoder project API key (use secrets.VOCODER_API_KEY)'
     required: true
-  app-dirs:
-    description: 'Comma-separated app directories for monorepos. Empty for single-app repos.'
-    required: false
-    default: ''
-  commit-mode:
-    description: 'How to commit translated files: "pr" (open a pull request) or "direct" (push to current branch)'
-    required: false
-    default: 'pr'
+  # commit-mode:
+  #   description: 'How to commit translated files: "pr" (open a pull request) or "commit" (push to current branch)'
+  #   required: false
+  #   default: 'commit'
   on-failure:
     description: 'fail (halt workflow) or proceed (continue with stale translations)'
     required: false
@@ -32,11 +28,7 @@ runs:
         VOCODER_API_KEY: ${{ inputs.api-key }}
         VOCODER_ON_FAILURE: ${{ inputs.on-failure }}
       run: |
-        ARGS=""
-        if [ -n "${{ inputs.app-dirs }}" ]; then
-          ARGS="--app-dirs ${{ inputs.app-dirs }}"
-        fi
-        npx --yes @vocoder/cli@${{ inputs.cli-version }} translate $ARGS
+        npx --yes @vocoder/cli@${{ inputs.cli-version }} translate
 
     - name: Commit locale files
       shell: bash
@@ -102,7 +94,7 @@ runs:
 
         TARGET_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-        if [ "${COMMIT_MODE^^}" = "DIRECT" ]; then
+        if [ "${COMMIT_MODE^^}" = "COMMIT" ]; then
           if [ "$SKIP_CI" = "true" ]; then
             git commit -m "chore(i18n): update translations" -m "[skip ci]"
           else
