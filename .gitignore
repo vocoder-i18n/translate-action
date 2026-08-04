@@ -1,0 +1,17 @@
+# Local agent tooling — intentionally not tracked.
+# Spec Kit scaffolding is reinstalled per machine via `specify init`.
+# `specs` is a symlink to ../specs/<repo>, so specs live outside this repo.
+#
+# .specify/memory/constitution.md is the exception: the gate needs the
+# committed copy to check drift where CI can see it. .specify/scripts/ is
+# the exception because a bare `.specify/` ignore prunes git's traversal
+# entirely, silently defeating any negation nested inside it — .specify/*
+# plus explicit negations is the only pattern that actually works.
+.specify/*
+!.specify/memory/
+.specify/memory/*
+!.specify/memory/constitution.md
+!.specify/scripts/
+
+.claude/
+specs
