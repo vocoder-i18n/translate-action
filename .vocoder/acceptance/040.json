@@ -1,0 +1,13 @@
+{
+	"ticket": "VOC-40",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "README.md no longer references the nonexistent working-directory input; on-failure and commit-mode are documented matching action.yml's real defaults and behavior; the example workflow includes the if: github.actor != 'vocoder-bot[bot]' loop guard",
+			"evidence": {
+				"type": "manual",
+				"ref": "this PR's diff to README.md"
+			}
+		}
+	]
+}
