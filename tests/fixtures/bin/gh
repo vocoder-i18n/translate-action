@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Stands in for the real `gh` in tests: records every invocation to
+# $CALL_LOG instead of calling GitHub. `pr list ... --jq 'length'` prints
+# $FAKE_GH_PR_COUNT (default "0") since commit-dispatch.sh branches on that
+# count; every other subcommand always succeeds with no output.
+set -euo pipefail
+
+echo "gh $*" >> "${CALL_LOG:?CALL_LOG must be set by the test}"
+
+if [ "${1:-}" = "pr" ] && [ "${2:-}" = "list" ]; then
+  echo "${FAKE_GH_PR_COUNT:-0}"
+fi
+
+exit 0

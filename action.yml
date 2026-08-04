@@ -7,10 +7,10 @@ inputs:
   api-key:
     description: 'Vocoder project API key (use secrets.VOCODER_API_KEY)'
     required: true
-  # commit-mode:
-  #   description: 'How to commit translated files: "pr" (open a pull request) or "commit" (push to current branch)'
-  #   required: false
-  #   default: 'commit'
+  commit-mode:
+    description: 'How to commit translated files: "pr" (open a pull request) or "direct" (push to current branch). The server-returned commitMode from the translate result takes precedence over this input when present.'
+    required: false
+    default: 'pr'
   on-failure:
     description: 'fail (halt workflow) or proceed (continue with stale translations)'
     required: false
@@ -35,94 +35,4 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
         VOCODER_COMMIT_MODE: ${{ inputs.commit-mode }}
-      run: |
-        RESULT_FILE="${RUNNER_TEMP}/vocoder-result.json"
-
-        if [ ! -f "$RESULT_FILE" ]; then
-          echo "No translate result file — skipping commit (branch not targeted or dry run)"
-          exit 0
-        fi
-
-        STATUS=$(jq -r '.status // "unknown"' "$RESULT_FILE")
-        if [ "$STATUS" != "complete" ]; then
-          echo "Translation status: $STATUS — skipping commit"
-          exit 0
-        fi
-
-        # Write all locale files from the result tree
-        WROTE_FILES=0
-        while IFS= read -r FILE_PATH; do
-          CONTENT=$(jq -r --arg p "$FILE_PATH" \
-            '[.apps[] | .localeFileTree // {} | .[$p]] | map(select(. != null)) | first // empty' \
-            "$RESULT_FILE")
-          if [ -n "$CONTENT" ]; then
-            mkdir -p "$(dirname "$FILE_PATH")"
-            printf '%s' "$CONTENT" > "$FILE_PATH"
-            WROTE_FILES=$((WROTE_FILES + 1))
-          fi
-        done < <(jq -r '[.apps[] | .localeFileTree // {} | keys[]] | unique[]' "$RESULT_FILE" 2>/dev/null)
-
-        if [ "$WROTE_FILES" -eq 0 ]; then
-          echo "No locale files in result — skipping commit"
-          exit 0
-        fi
-
-        # Stage locale files
-        jq -r '[.apps[] | .localeFileTree // {} | keys[]] | unique[]' "$RESULT_FILE" | \
-          xargs git add --
-
-        if git diff --staged --quiet; then
-          echo "Locale files unchanged — nothing to commit"
-          exit 0
-        fi
-
-        git config user.name "vocoder-bot[bot]"
-        git config user.email "vocoder-bot[bot]@users.noreply.github.com"
-
-        # Server-returned commitMode takes precedence over the action input
-        COMMIT_MODE=$(jq -r \
-          '[.apps[] | .commitConfig.commitMode | select(. != null)] | first // empty' \
-          "$RESULT_FILE")
-        COMMIT_MODE="${COMMIT_MODE:-${VOCODER_COMMIT_MODE:-pr}}"
-
-        AUTO_MERGE=$(jq -r \
-          '[.apps[] | .commitConfig.autoMergePRs | select(. != null)] | first // false' \
-          "$RESULT_FILE")
-        SKIP_CI=$(jq -r \
-          '[.apps[] | .commitConfig.skipCiOnDirectCommit | select(. != null)] | first // true' \
-          "$RESULT_FILE")
-
-        TARGET_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-
-        if [ "${COMMIT_MODE^^}" = "COMMIT" ]; then
-          if [ "$SKIP_CI" = "true" ]; then
-            git commit -m "chore(i18n): update translations" -m "[skip ci]"
-          else
-            git commit -m "chore(i18n): update translations"
-          fi
-          git push origin "HEAD:$TARGET_BRANCH"
-
-        else
-          PR_BRANCH="vocoder/translate-$TARGET_BRANCH"
-          # -B creates the branch or resets it to current HEAD (staged changes travel with us)
-          git checkout -B "$PR_BRANCH"
-          git commit -m "chore(i18n): update translations"
-          git push origin "$PR_BRANCH" --force
-
-          PR_COUNT=$(gh pr list \
-            --head "$PR_BRANCH" \
-            --base "$TARGET_BRANCH" \
-            --json number \
-            --jq 'length')
-          if [ "$PR_COUNT" = "0" ]; then
-            gh pr create \
-              --title "chore(i18n): update translations" \
-              --body "Automated translation update by [Vocoder](https://vocoder.app)." \
-              --base "$TARGET_BRANCH" \
-              --head "$PR_BRANCH"
-          fi
-
-          if [ "$AUTO_MERGE" = "true" ]; then
-            gh pr merge "$PR_BRANCH" --auto --squash 2>/dev/null || true
-          fi
-        fi
+      run: ${{ github.action_path }}/scripts/commit-locale-files.sh
