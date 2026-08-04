@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Stands in for the real `git` in tests: records every invocation to
+# $CALL_LOG instead of touching a repository, and always succeeds. Nothing
+# under test reads git's output, so no subcommand needs canned stdout.
+set -euo pipefail
+
+echo "git $*" >> "${CALL_LOG:?CALL_LOG must be set by the test}"
+exit 0

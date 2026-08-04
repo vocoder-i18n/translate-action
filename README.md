@@ -26,6 +26,7 @@ jobs:
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `api-key` | Yes | — | Vocoder project API key |
+| `commit-mode` | No | `pr` | How to commit translated files: `pr` (open a pull request) or `direct` (push to current branch). The commit mode configured on your Vocoder project takes precedence over this input when set. |
 | `working-directory` | No | `.` | Path to the app directory containing `vocoder.config.ts` |
 | `cli-version` | No | `latest` | Pin a specific `@vocoder/cli` version for reproducible builds |
 

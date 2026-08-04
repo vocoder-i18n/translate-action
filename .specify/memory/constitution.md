@@ -2,13 +2,13 @@
 
 <!--
   GENERATED REGION. Do not edit between the STAMPED markers.
-  Source: ../../CONSTITUTION.md   Hash: fbc3f092fbb4b1ac1a5224f9cce351178809278beba184253655cb1b2a74299b
+  Source: ../../CONSTITUTION.md   Hash: 0902c47c6e5159df970c7c3b7c7a6bdcf956a89303da8e1fc89aa5523bda3e8e
   Regenerate: ./scripts/sync-constitution.sh
   Repo-specific rules belong in the LOCAL region at the bottom of this file.
 -->
 
 <!-- STAMPED:BEGIN -->
-<!-- hash: fbc3f092fbb4b1ac1a5224f9cce351178809278beba184253655cb1b2a74299b -->
+<!-- hash: 0902c47c6e5159df970c7c3b7c7a6bdcf956a89303da8e1fc89aa5523bda3e8e -->
 
 ## 2. Core principles
 
@@ -31,6 +31,7 @@ This is the single most important context for every decision, and it holds until
 - No deprecation paths, no compatibility shims, no aliases, no `@deprecated` markers, no dual-write migrations, no version negotiation.
 - Breaking changes to published SDK packages are **normal and expected**. Bump the version and move on.
 - Do not preserve an existing design merely because it exists. If the current shape is wrong, change it.
+- **When comparing options, existing state is not evidence.** "This is what the docs already say," "this is what the code already does," "this is the established name" — none of these count in favor of an option. Recommend whichever is actually best, then change whatever else needs to change to match. Existing artifacts are themselves candidates for revision, not anchors.
 - Do not ask permission to make a breaking change. Correctness is the standard; compatibility is not a consideration.
 
 **What this does not excuse.** Some care is unrelated to users:
