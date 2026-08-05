@@ -1,0 +1,35 @@
+{
+	"ticket": "VOC-35",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "GIVEN no vocoder-result.json exists at $RUNNER_TEMP WHEN commit-locale-files.sh runs THEN it exits 0 having written nothing and staged nothing",
+			"test": "tests/commit-locale-files.test.sh::returns early when no result file exists"
+		},
+		{
+			"id": "AC2",
+			"statement": "GIVEN a result file whose status is not \"complete\" WHEN commit-locale-files.sh runs THEN it exits 0 having written nothing",
+			"test": "tests/commit-locale-files.test.sh::returns early when status is not complete"
+		},
+		{
+			"id": "AC3",
+			"statement": "GIVEN a result file with a non-empty localeFileTree for one or more apps WHEN commit-locale-files.sh runs THEN every file in the tree is written to disk with its exact content at its exact relative path, including creating any needed parent directories, and staged via git add",
+			"test": "tests/commit-locale-files.test.sh::writes every file in localeFileTree at its exact path with exact content and stages it via git add"
+		},
+		{
+			"id": "AC4",
+			"statement": "GIVEN the written files are identical to what is already committed WHEN commit-locale-files.sh runs THEN it exits 0 without proceeding to commit-dispatch.sh",
+			"test": "tests/commit-locale-files.test.sh::exits before dispatch when written content matches what is already committed"
+		},
+		{
+			"id": "AC5",
+			"statement": "GIVEN a result file where apps[].commitConfig.commitMode is set WHEN commit-locale-files.sh runs THEN that server-provided value is used over the action's own commit-mode input ($VOCODER_COMMIT_MODE)",
+			"test": "tests/commit-locale-files.test.sh::server-provided commitMode overrides the action's own commit-mode input"
+		},
+		{
+			"id": "AC6",
+			"statement": "GIVEN a result file with real file changes WHEN commit-locale-files.sh completes its own work THEN it hands off to commit-dispatch.sh with the correct TARGET_BRANCH, COMMIT_MODE, AUTO_MERGE, and SKIP_CI values",
+			"test": "tests/commit-locale-files.test.sh::hands off to commit-dispatch.sh with the correct target branch, auto-merge, and skip-ci values"
+		}
+	]
+}
