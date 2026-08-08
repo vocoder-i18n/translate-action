@@ -2,13 +2,13 @@
 
 <!--
   GENERATED REGION. Do not edit between the STAMPED markers.
-  Source: ../../CONSTITUTION.md   Hash: 0902c47c6e5159df970c7c3b7c7a6bdcf956a89303da8e1fc89aa5523bda3e8e
+  Source: ../../CONSTITUTION.md   Hash: 361948b6ef523bb12c5d7d316621348d524c4ea850e65122bc2e6f00e98068e4
   Regenerate: ./scripts/sync-constitution.sh
   Repo-specific rules belong in the LOCAL region at the bottom of this file.
 -->
 
 <!-- STAMPED:BEGIN -->
-<!-- hash: 0902c47c6e5159df970c7c3b7c7a6bdcf956a89303da8e1fc89aa5523bda3e8e -->
+<!-- hash: 361948b6ef523bb12c5d7d316621348d524c4ea850e65122bc2e6f00e98068e4 -->
 
 ## 2. Core principles
 
@@ -19,6 +19,7 @@
 5. **Static analysis is not verification.** Reading code proves it exists, not that it works. Claims of behavior require execution.
 6. **Proportionality.** Rigor scales with risk and surface area. A README fix does not need an E2E spec. Anything touching money, auth, or customer data does.
 7. **There are no users yet.** Vocoder is pre-launch. Nothing is deployed, nothing is depended on, and no customer data exists. **Build the right thing, not the compatible thing.**
+8. **Verify, never assume.** A claim about how something currently behaves — a link, a page, a flow, a UI state, a config value — is not made until it has actually been checked, this session, against the real thing. "I remember it working that way," "the note said it wasn't written," and "this is how it usually works" are not verification. If checking is possible and wasn't done, the claim is a guess, and must be labeled as one — not stated as fact. This applies with the same force as principle 5 applies to code: reading about a thing is not observing it.
 
 ## 2.1 Pre-launch stance
 
@@ -189,7 +190,24 @@ When a needed value has no constant, **create one** rather than inlining it twic
 
 Repo conventions are authoritative and live in `app/AGENTS.md` (Component Structure, UI Components, Modals & Dialogs, Forms) and `docs/BRAND_IDENTITY.md`. Read them before writing UI; this constitution does not restate them.
 
-**Divergence** from an existing pattern is allowed but never silent — state it in the spec with a reason, before implementing.
+**Divergence** from an existing pattern is allowed but never silent — state it in the spec with a reason, before implementing. "Checked the closest existing screen" means opening it and comparing, not recalling it — see principle 8.
+
+**Empty and default states** — most dashboard pages have a state that only becomes the full feature once real data exists (a translation sync has run, a glossary term was added, etc.). For that state:
+
+- [ ] Copy names the concrete action that unlocks the feature (not just "no data yet")
+- [ ] A link to external documentation is allowed **only** as a supplement to that inline copy, never as the sole explanation — and only ever links to a page that is confirmed to exist right now (principle 8: click it, don't assume it resolves)
+- [ ] Doc-page *accuracy* (as opposed to existence) is not a per-ticket blocker — content freshness is a pre-launch gate covered once, broadly, not re-verified by every ticket that happens to link out
+- [ ] Prefer the shared empty-state primitive (`EmptyText`, or its successor) over a bespoke one; a new one-off empty-state layout needs the same justification as any other new primitive (§4.4 above)
+
+**Screenshot floor** — independent of tier. Any ticket that changes rendered UI gets at least one real, current browser screenshot of the affected screen before being marked done, even when the ticket's tier doesn't require full L5 Playwright artifacts. This is a floor beneath §6's Playwright-artifact requirement, not a replacement for it — L5 work still needs the full trace/video plus a screenshot per state.
+
+**Three-hat sign-off** — before implementation starts, a UI-facing spec states, briefly, for each of:
+
+- [ ] **Product**: what this reduces friction on, or what adoption/retention behavior it's meant to drive
+- [ ] **UX**: why this is the simplest path to the outcome, and that it was compared against the closest existing pattern (see Precedent, above)
+- [ ] **Engineering**: which existing components/primitives it reuses, and what (if anything) is genuinely new
+
+This is not a rubber-stamp checklist — a one-line answer per hat is enough, but a missing answer means the spec isn't ready for `/speckit-plan`.
 
 ### 4.5 If it changes published SDK behavior
 
@@ -567,9 +585,36 @@ An agent blocked by this section stops and asks, following the decision-point pr
 <!-- LOCAL:BEGIN -->
 ## Repo-specific rules
 
-See `translate-action/CLAUDE.md` and `translate-action/AGENTS.md` for the authoritative repo conventions.
 Add rules here that apply only to `translate-action` and are not covered by the stamped block.
 
 Where a rule here conflicts with the stamped block, the stamped block wins;
 raise the conflict as an amendment against the root CONSTITUTION.md.
+
+### The gate here (§12)
+
+This repo has no `package.json` and no node runtime dependency — the action
+itself is a composite of bash scripts that shell out to `npx @vocoder/cli`.
+`./scripts/verify.sh` follows the same contract as `sdk`'s and `app`'s
+(`sdk/specs/022-verify-acceptance-manifest/contracts/verify-cli.md`), with
+two departures forced by that:
+
+- **No build/typecheck/lint rows.** There is nothing to build, typecheck, or
+  lint. Those checks are omitted rather than faked as "skipped".
+- **Unit tests run through `tests/*.test.sh`**, each printing one
+  `PASS: <name>` / `FAIL: <name>` line per case (see `tests/run.sh`) instead
+  of a JSON test reporter. An acceptance criterion's `test` field therefore
+  names `<file>::<case name>` — e.g.
+  `tests/commit-locale-files.test.sh::returns early when no result file
+  exists` — the same key shape `sdk`'s vitest-backed gate uses, just sourced
+  from those PASS:/FAIL: lines instead of `vitest run --reporter=json`.
+
+The disclosure scan (§13.7) applies here exactly as in `sdk` — this repo is
+public too. Its matching logic lives in `scripts/lib/disclosure-scan.sh`
+(bash port of `sdk/scripts/verify/disclosure.ts`; keep the two in sync if
+either's rules change) and is exercised directly by
+`tests/disclosure-scan.test.sh`.
+
+CI (`.github/workflows/verify.yml`) runs the gate on every PR and on push to
+`main`, with `fetch-depth: 0` — the disclosure scan needs real history to
+compute a merge base.
 <!-- LOCAL:END -->
