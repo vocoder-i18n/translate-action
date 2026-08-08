@@ -2,13 +2,13 @@
 
 <!--
   GENERATED REGION. Do not edit between the STAMPED markers.
-  Source: ../../CONSTITUTION.md   Hash: 361948b6ef523bb12c5d7d316621348d524c4ea850e65122bc2e6f00e98068e4
+  Source: ../../CONSTITUTION.md   Hash: 00a382f2b4c39a58a6f9200f9e88674421094ba8ba94ed8e546e83f2c390c027
   Regenerate: ./scripts/sync-constitution.sh
   Repo-specific rules belong in the LOCAL region at the bottom of this file.
 -->
 
 <!-- STAMPED:BEGIN -->
-<!-- hash: 361948b6ef523bb12c5d7d316621348d524c4ea850e65122bc2e6f00e98068e4 -->
+<!-- hash: 00a382f2b4c39a58a6f9200f9e88674421094ba8ba94ed8e546e83f2c390c027 -->
 
 ## 2. Core principles
 
@@ -177,6 +177,12 @@ When a needed value has no constant, **create one** rather than inlining it twic
 - [ ] Error state implemented
 - [ ] Responsive at mobile and desktop widths
 - [ ] Playwright spec covers happy path + empty + error
+
+**Test data for those states** — proving a state exists means putting the product in that state for real, not describing it.
+
+- [ ] **Translation content is never hand-written**, including for demos, screenshots, and tests. Any translated string shown anywhere came from a real `vocoder translate` run — extraction, real provider call, real sync — never typed in by a human or an agent pretending to be one. If the real pipeline is blocked (bad credentials, missing project), that is a blocker to resolve, not a reason to fabricate output.
+- [ ] **Canonical scenarios are named and durable**, not regenerated per session. A small, fixed set of test projects covers empty / small-populated / large-populated / stuck-or-errored states; re-sync them when pipeline behavior changes instead of standing up a fresh one-off each time. Document what each one is for wherever the team keeps that list (currently: ask before assuming one doesn't exist — see principle 8).
+- [ ] **Structural and account data** (orgs, projects, membership, roles, plan tier) goes through the real signup/onboarding/role-assignment flows preferentially — the same standard as translation content, because a permission bug is exactly as real whether the account was created by hand or by script. Direct DB seeding is acceptable only for pure volume where realism doesn't matter (e.g. 200 rows to prove a table paginates) — never for anything a screenshot will present as a real scenario.
 
 **Precedent** — new UI is derived from existing UI, never invented alongside it.
 
