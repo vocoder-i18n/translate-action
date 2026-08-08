@@ -1,0 +1,21 @@
+name: Verify
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # scripts/verify.sh's disclosure scan diffs against the merge
+          # base, which needs real history — the default single-commit
+          # checkout leaves merge-base unresolvable and the check reports
+          # itself skipped instead of actually running.
+          fetch-depth: 0
+
+      - name: Run the gate
+        run: ./scripts/verify.sh
