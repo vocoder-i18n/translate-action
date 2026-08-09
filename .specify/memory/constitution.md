@@ -2,13 +2,13 @@
 
 <!--
   GENERATED REGION. Do not edit between the STAMPED markers.
-  Source: ../../CONSTITUTION.md   Hash: 00a382f2b4c39a58a6f9200f9e88674421094ba8ba94ed8e546e83f2c390c027
+  Source: ../../CONSTITUTION.md   Hash: 0f51faab15af5bfcbf1a1c48c8ee617f27f0c85eef2d6d94a3ebfafbd00eb8f6
   Regenerate: ./scripts/sync-constitution.sh
   Repo-specific rules belong in the LOCAL region at the bottom of this file.
 -->
 
 <!-- STAMPED:BEGIN -->
-<!-- hash: 00a382f2b4c39a58a6f9200f9e88674421094ba8ba94ed8e546e83f2c390c027 -->
+<!-- hash: 0f51faab15af5bfcbf1a1c48c8ee617f27f0c85eef2d6d94a3ebfafbd00eb8f6 -->
 
 ## 2. Core principles
 
@@ -206,6 +206,14 @@ Repo conventions are authoritative and live in `app/AGENTS.md` (Component Struct
 - [ ] Prefer the shared empty-state primitive (`EmptyText`, or its successor) over a bespoke one; a new one-off empty-state layout needs the same justification as any other new primitive (§4.4 above)
 
 **Screenshot floor** — independent of tier. Any ticket that changes rendered UI gets at least one real, current browser screenshot of the affected screen before being marked done, even when the ticket's tier doesn't require full L5 Playwright artifacts. This is a floor beneath §6's Playwright-artifact requirement, not a replacement for it — L5 work still needs the full trace/video plus a screenshot per state.
+
+A screenshot that only ever existed inside an agent's own tool-call output doesn't satisfy this — it must be made durable and visible to whoever reviews the work:
+
+- [ ] Saved to disk, not left ephemeral in tool-call context only
+- [ ] Attached to the ticket in the tracker (Linear or equivalent) — a reviewer opening the ticket sees the evidence without needing to re-run the verification themselves
+- [ ] Shared with whoever is reviewing in-session, not just described in text ("confirmed via screenshot" is not itself evidence)
+
+No requirement to embed images directly in the PR body — link the tracker ticket's attachment instead; most SCM CLIs have no clean path for inline PR images.
 
 **Three-hat sign-off** — before implementation starts, a UI-facing spec states, briefly, for each of:
 
