@@ -22,17 +22,26 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # No `${{ }}` expression appears in any `run:` body. GitHub substitutes
+    # expressions into the script text before bash ever sees it, so an input
+    # carrying `; rm -rf /` would execute as its own command. Every value
+    # reaches the shell through `env:` instead, where it arrives as data and
+    # is quoted at the point of use. tests/action-yml.test.sh enforces this.
     - name: Run Vocoder translate
       shell: bash
       env:
         VOCODER_API_KEY: ${{ inputs.api-key }}
         VOCODER_ON_FAILURE: ${{ inputs.on-failure }}
+        CLI_VERSION: ${{ inputs.cli-version }}
       run: |
-        npx --yes @vocoder/cli@${{ inputs.cli-version }} translate
+        npx --yes "@vocoder/cli@${CLI_VERSION}" translate
 
+    # GITHUB_ACTION_PATH is set by the runner for composite actions, so the
+    # script's location needs no expression either.
     - name: Commit locale files
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
         VOCODER_COMMIT_MODE: ${{ inputs.commit-mode }}
-      run: ${{ github.action_path }}/scripts/commit-locale-files.sh
+      run: |
+        "$GITHUB_ACTION_PATH/scripts/commit-locale-files.sh"
