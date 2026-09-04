@@ -1,0 +1,64 @@
+{
+	"ticket": "VOC-116",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "GIVEN a detached checkout — the normal state for pull_request events, tag pushes and `with: ref: <sha>` — and no branch name supplied WHEN the script runs THEN it exits non-zero having pushed nothing, created no branch named vocoder/translate-HEAD, and made no gh call. Previously PR mode created and force-pushed that branch into the customer's repository and only then failed at `gh pr create --base HEAD`: side effects before the error",
+			"test": "tests/commit-locale-files.test.sh::refuses to deliver from a detached HEAD when no branch name was supplied"
+		},
+		{
+			"id": "AC2",
+			"statement": "GIVEN a detached checkout and VOCODER_TARGET_BRANCH supplied by the runner WHEN the script runs THEN delivery targets that branch. action.yml passes `github.head_ref || github.ref_name`, which is set on pull_request and on everything else respectively",
+			"test": "tests/commit-locale-files.test.sh::delivers to the branch the runner supplied, not the detached HEAD"
+		},
+		{
+			"id": "AC3",
+			"statement": "GIVEN a monorepo whose apps disagree about commitMode WHEN the script runs THEN it exits non-zero naming the field, having pushed nothing. Delivery is a single git operation over the whole staged tree, so there is exactly one mode available per run; the previous `| first` silently delivered every app the way whichever app sorted first wanted, even though commitMode is per-app in the schema",
+			"test": "tests/commit-locale-files.test.sh::refuses when apps disagree about commitMode, instead of using the first app's"
+		},
+		{
+			"id": "AC4",
+			"statement": "GIVEN a monorepo whose apps all agree WHEN the script runs THEN both apps' locale files are delivered in one commit, so refusing disagreement does not break the ordinary monorepo case",
+			"test": "tests/commit-locale-files.test.sh::proceeds when every app agrees on commitMode"
+		},
+		{
+			"id": "AC5",
+			"statement": "A target branch containing a slash produces one flattened pull request branch. git stores refs as files, so vocoder/translate-feat and vocoder/translate-feat/x cannot both exist — the second is a directory/file conflict and the push is rejected",
+			"test": "tests/commit-dispatch.test.sh::a slashed target branch is flattened into one PR branch name"
+		},
+		{
+			"id": "AC6",
+			"statement": "The pull request body states that its branch is force-pushed on every run. The branch is machine-owned and each run regenerates the full locale tree, so a commit made to it by hand is silently lost; the body is the only place a reviewer would learn that before losing work",
+			"test": "tests/commit-dispatch.test.sh::the pull request body warns that the branch is force-pushed each run"
+		},
+		{
+			"id": "AC7",
+			"statement": "A rejected push fails the run rather than continuing on to open a pull request for a branch that is not on the remote",
+			"test": "tests/commit-dispatch.test.sh::a rejected push fails the run instead of continuing to open a PR"
+		},
+		{
+			"id": "AC8",
+			"statement": "The git test fixture can express failure. It previously exited 0 unconditionally, so no test could distinguish a successful push from a rejected one — the ticket names this as the reason the refspec bug went uncaught",
+			"evidence": {
+				"type": "manual",
+				"ref": "tests/fixtures/bin/git now honours FAKE_GIT_FAIL, a space-separated list of subcommands that should exit 1 with a message on stderr; it still records to $CALL_LOG and still succeeds by default, so every existing test is unaffected. AC7 is the first test to use it. Verified honestly: AC7 passes against the pre-VOC-116 commit-dispatch.sh as well, because `set -e` already propagated a failed push — the defect was the fixture's inability to produce one, not the script's handling of it. AC7 therefore locks in behaviour that was previously untestable rather than fixing a live bug, and is recorded as such."
+			}
+		},
+		{
+			"id": "AC9",
+			"statement": "Both scripts install an ERR trap naming the script, line and failing command. `set -e` exits silently on the failing command, which in a composite action surfaces as a red step showing whatever the last tool happened to print",
+			"evidence": {
+				"type": "manual",
+				"ref": "scripts/commit-locale-files.sh and scripts/commit-dispatch.sh each declare `trap '...' ERR` immediately after `set -euo pipefail`, emitting a ::error:: annotation with ${BASH_SOURCE[0]}, ${LINENO}, ${BASH_COMMAND} and the exit status before re-exiting with it. commit-locale-files.sh's pre-existing EXIT trap for its temp file is a different signal and both remain installed. Exercised incidentally by every failure-path test in the suite — AC1, AC3, AC7 and the malformed-result and missing-path cases all exit through it, and all assert a non-zero exit."
+			}
+		},
+		{
+			"id": "AC10",
+			"statement": "The tests encode the fixes rather than describing the scripts",
+			"evidence": {
+				"type": "manual",
+				"ref": "Mutation check run before committing: scripts/commit-locale-files.sh, scripts/commit-dispatch.sh and action.yml were restored to their pre-VOC-116 state while keeping the new tests and the new fixture. commit-dispatch.test.sh reported 5 passed / 2 failed and commit-locale-files.test.sh 15 passed / 3 failed — failing exactly AC1, AC2, AC3, AC5 and AC6 by name. The two new tests that still passed are AC4, which is the no-regression case and is meant to pass in both states, and AC7, for the reason recorded under AC8. Everything was restored and the full suite re-run: 4 + 7 + 18 + 8 passed, 0 failed."
+			}
+		}
+	]
+}
