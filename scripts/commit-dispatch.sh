@@ -17,6 +17,12 @@
 # pull requests against the current repository.
 set -euo pipefail
 
+# `set -e` exits silently on the failing command, which in a composite action
+# surfaces as a red step with whatever the last tool happened to print. Name
+# the script and line so a failure is attributable without re-running with
+# bash -x.
+trap 'status=$?; [ "$status" -ne 0 ] && echo "::error::${BASH_SOURCE[0]}: failed at line ${LINENO}: ${BASH_COMMAND} (exit $status)" >&2; exit $status' ERR
+
 COMMIT_MESSAGE="chore(i18n): update translations"
 COMMIT_MODE_NORMALIZED="$(printf '%s' "$COMMIT_MODE" | tr '[:lower:]' '[:upper:]')"
 
@@ -31,10 +37,18 @@ case "$COMMIT_MODE_NORMALIZED" in
     ;;
 
   PR)
-    PR_BRANCH="vocoder/translate-$TARGET_BRANCH"
+    # Slashes in the target branch are flattened. git stores refs as files, so
+    # a branch "vocoder/translate-feat" and a branch "vocoder/translate-feat/x"
+    # cannot both exist — the second is a directory/file conflict and the push
+    # is rejected. Flattening keeps one ref per target branch and takes the
+    # conflict off the table.
+    PR_BRANCH="vocoder/translate-$(printf '%s' "$TARGET_BRANCH" | tr '/' '-')"
     # -B creates the branch or resets it to current HEAD (staged changes travel with us)
     git checkout -B "$PR_BRANCH"
     git commit -m "$COMMIT_MESSAGE"
+    # --force because each run regenerates the full locale tree: the branch is
+    # machine-owned and its history is not meant to accumulate. The pull request
+    # body says so, since anything committed here by hand is lost on the next run.
     git push origin "$PR_BRANCH" --force
 
     PR_COUNT=$(gh pr list \
@@ -45,7 +59,9 @@ case "$COMMIT_MODE_NORMALIZED" in
     if [ "$PR_COUNT" = "0" ]; then
       gh pr create \
         --title "$COMMIT_MESSAGE" \
-        --body "Automated translation update by [Vocoder](https://vocoder.app)." \
+        --body "Automated translation update by [Vocoder](https://vocoder.app).
+
+This branch is regenerated and force-pushed on every run, so commits made to it by hand will be lost. To correct a translation, edit it in Vocoder or in your source locale files on \`$TARGET_BRANCH\`." \
         --base "$TARGET_BRANCH" \
         --head "$PR_BRANCH"
     fi

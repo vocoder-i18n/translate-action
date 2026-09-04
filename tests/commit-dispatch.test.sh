@@ -54,6 +54,83 @@ run_test() {
   fi
 }
 
+# git stores refs as files, so "vocoder/translate-feat" and
+# "vocoder/translate-feat/x" cannot both exist — the second is a
+# directory/file conflict and the push is rejected. Flattening the slash
+# keeps one ref per target branch.
+test_slashed_target_branch_is_flattened() {
+  local call_log
+  call_log="$(mktemp)"
+
+  PATH="$FAKE_BIN:$PATH" \
+  CALL_LOG="$call_log" \
+  COMMIT_MODE="PR" \
+  TARGET_BRANCH="feature/new-copy" \
+  SKIP_CI="true" \
+  AUTO_MERGE="false" \
+  FAKE_GH_PR_COUNT="0" \
+    "$DISPATCH_SCRIPT" >/dev/null
+
+  assert_contains "git checkout -B vocoder/translate-feature-new-copy" "$call_log" &&
+  assert_contains "--base feature/new-copy" "$call_log" &&
+  assert_not_contains "vocoder/translate-feature/new-copy" "$call_log"
+  local result=$?
+  rm -f "$call_log"
+  return "$result"
+}
+
+# The branch is regenerated and force-pushed every run, so a commit made to it
+# by hand is silently lost. The body is the only place a reviewer would learn
+# that before losing work.
+test_pr_body_warns_the_branch_is_regenerated() {
+  local call_log
+  call_log="$(mktemp)"
+
+  PATH="$FAKE_BIN:$PATH" \
+  CALL_LOG="$call_log" \
+  COMMIT_MODE="PR" \
+  TARGET_BRANCH="main" \
+  SKIP_CI="true" \
+  AUTO_MERGE="false" \
+  FAKE_GH_PR_COUNT="0" \
+    "$DISPATCH_SCRIPT" >/dev/null
+
+  assert_contains "force-pushed on every run" "$call_log"
+  local result=$?
+  rm -f "$call_log"
+  return "$result"
+}
+
+# The push can be rejected for reasons the action cannot control — branch
+# protection, a token without the scope, a ref conflict. Continuing on to open
+# a pull request for a branch that is not on the remote produces a confusing
+# failure well downstream of the real one.
+test_rejected_push_fails_the_run() {
+  local call_log
+  call_log="$(mktemp)"
+
+  local exit_code=0
+  PATH="$FAKE_BIN:$PATH" \
+  CALL_LOG="$call_log" \
+  COMMIT_MODE="PR" \
+  TARGET_BRANCH="main" \
+  SKIP_CI="true" \
+  AUTO_MERGE="false" \
+  FAKE_GH_PR_COUNT="0" \
+  FAKE_GIT_FAIL="push" \
+    "$DISPATCH_SCRIPT" >/dev/null 2>&1 || exit_code=$?
+
+  local result=0
+  if [ "$exit_code" -eq 0 ]; then
+    echo "  expected a non-zero exit after a rejected push, got 0"
+    result=1
+  fi
+  assert_not_contains "gh pr create" "$call_log" || result=1
+
+  rm -f "$call_log"
+  return "$result"
+}
+
 test_direct_mode_pushes_without_opening_pr() {
   local call_log
   call_log="$(mktemp)"
@@ -149,6 +226,9 @@ test_unrecognized_mode_fails_loudly_and_never_dispatches() {
   return "$result"
 }
 
+run_test "a slashed target branch is flattened into one PR branch name" test_slashed_target_branch_is_flattened
+run_test "the pull request body warns that the branch is force-pushed each run" test_pr_body_warns_the_branch_is_regenerated
+run_test "a rejected push fails the run instead of continuing to open a PR" test_rejected_push_fails_the_run
 run_test "commit-mode DIRECT pushes directly, never opens a PR" test_direct_mode_pushes_without_opening_pr
 run_test "commit-mode PR opens a pull request, never pushes directly" test_pr_mode_opens_pr_and_never_pushes_direct
 run_test "commit-mode pr (lowercase) still opens a pull request" test_pr_mode_is_case_insensitive

@@ -38,10 +38,18 @@ runs:
 
     # GITHUB_ACTION_PATH is set by the runner for composite actions, so the
     # script's location needs no expression either.
+    #
+    # VOCODER_TARGET_BRANCH is the branch translations are delivered to. The
+    # checkout is detached for pull_request events, tag pushes and
+    # `with: ref: <sha>`, where `git rev-parse --abbrev-ref HEAD` yields the
+    # literal string "HEAD" — the runner is the only thing that knows the real
+    # name. github.head_ref is set on pull_request events, github.ref_name on
+    # everything else.
     - name: Commit locale files
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
         VOCODER_COMMIT_MODE: ${{ inputs.commit-mode }}
+        VOCODER_TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
       run: |
         "$GITHUB_ACTION_PATH/scripts/commit-locale-files.sh"

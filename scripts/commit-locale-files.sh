@@ -17,6 +17,12 @@
 # push and open pull requests against the current repository.
 set -euo pipefail
 
+# `set -e` exits silently on the failing command, which in a composite action
+# surfaces as a red step with whatever the last tool happened to print. Name
+# the script and line so a failure is attributable without re-running with
+# bash -x.
+trap 'status=$?; [ "$status" -ne 0 ] && echo "::error::${BASH_SOURCE[0]}: failed at line ${LINENO}: ${BASH_COMMAND} (exit $status)" >&2; exit $status' ERR
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESULT_FILE="${RUNNER_TEMP}/vocoder-result.json"
 
@@ -119,20 +125,53 @@ fi
 git config user.name "vocoder-bot[bot]"
 git config user.email "vocoder-bot[bot]@users.noreply.github.com"
 
+# Returns the one value every app agrees on for a commitConfig field, or the
+# given default when no app set it.
+#
+# Delivery is a single git operation over the whole staged tree, so there is
+# exactly one commit mode available per run. Taking the first app's value —
+# which is what `| first` did — silently delivered every app in a monorepo the
+# way whichever app happened to sort first wanted, even though commitMode is
+# per-app in the schema. Disagreement is refused rather than guessed at.
+agreed_commit_config() {
+  local field="$1" default="$2" values count
+  values=$(jq -r --arg f "$field" \
+    '[.apps[]? | .commitConfig[$f] | select(. != null) | tostring] | unique | .[]' \
+    "$RESULT_FILE")
+  if [ -z "$values" ]; then
+    printf '%s' "$default"
+    return 0
+  fi
+  count=$(printf '%s\n' "$values" | wc -l | tr -d ' ')
+  if [ "$count" -gt 1 ]; then
+    echo "::error::Apps in this repository disagree about ${field}: $(printf '%s' "$values" | tr '\n' ' '). A single workflow run delivers every app in one commit, so it cannot honour both. Give the apps the same setting, or run them from separate workflows with their own app-dir." >&2
+    return 1
+  fi
+  printf '%s' "$values"
+}
+
 # Server-returned commitMode takes precedence over the action input
-COMMIT_MODE=$(jq -r \
-  '[.apps[] | .commitConfig.commitMode | select(. != null)] | first // empty' \
-  "$RESULT_FILE")
+COMMIT_MODE=$(agreed_commit_config commitMode "")
 COMMIT_MODE="${COMMIT_MODE:-${VOCODER_COMMIT_MODE:-pr}}"
 
-AUTO_MERGE=$(jq -r \
-  '[.apps[] | .commitConfig.autoMergePRs | select(. != null)] | first // false' \
-  "$RESULT_FILE")
-SKIP_CI=$(jq -r \
-  '[.apps[] | .commitConfig.skipCiOnDirectCommit | select(. != null)] | first // true' \
-  "$RESULT_FILE")
+AUTO_MERGE=$(agreed_commit_config autoMergePRs false)
+SKIP_CI=$(agreed_commit_config skipCiOnDirectCommit true)
 
-TARGET_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+# `git rev-parse --abbrev-ref HEAD` returns the literal string "HEAD" whenever
+# the checkout is detached, which is the normal state for pull_request events,
+# tag pushes and `with: ref: <sha>`. Direct mode then pushed to the unusable
+# refspec "HEAD:HEAD"; PR mode was worse, creating and force-pushing a branch
+# literally named vocoder/translate-HEAD into the repository before failing at
+# `gh pr create --base HEAD`. The runner knows the real branch, so the action
+# passes it in.
+TARGET_BRANCH="${VOCODER_TARGET_BRANCH:-}"
+if [ -z "$TARGET_BRANCH" ]; then
+  TARGET_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+fi
+if [ "$TARGET_BRANCH" = "HEAD" ] || [ -z "$TARGET_BRANCH" ]; then
+  echo "::error::Could not determine the branch to deliver translations to — the checkout is detached and no branch name was supplied. Nothing was pushed. If you are running this action outside a normal push or pull_request event, set the VOCODER_TARGET_BRANCH environment variable on the step." >&2
+  exit 1
+fi
 
 COMMIT_MODE="$COMMIT_MODE" \
 TARGET_BRANCH="$TARGET_BRANCH" \

@@ -183,6 +183,154 @@ test_returns_early_when_status_is_not_complete() {
   return "$result"
 }
 
+# `git rev-parse --abbrev-ref HEAD` returns the literal string "HEAD" on a
+# detached checkout, which is the normal state for pull_request events, tag
+# pushes and `with: ref: <sha>`. In PR mode the old code created and
+# force-pushed a branch literally named vocoder/translate-HEAD into the
+# customer's repository, and only then failed at `gh pr create --base HEAD` —
+# side effects before the error.
+test_detached_head_refuses_and_pushes_nothing() {
+  setup_scratch_repo
+  local call_log stderr_file
+  call_log="$(mktemp)"
+  stderr_file="$(mktemp)"
+
+  git -C "$SCRATCH_REPO" checkout --quiet --detach HEAD
+
+  cli_wrote "locales/fr.json" '{"hello":"Bonjour"}'
+  write_result_file '{"status":"complete","apps":[{"writtenPaths":["locales/fr.json"],"commitConfig":{"commitMode":"pr"}}]}'
+
+  local exit_code=0
+  run_sut "CALL_LOG=$call_log" "FAKE_GH_PR_COUNT=0" >/dev/null 2>"$stderr_file" || exit_code=$?
+
+  local result=0
+  if [ "$exit_code" -eq 0 ]; then
+    echo "  expected a non-zero exit, got 0"
+    result=1
+  fi
+  local remote_refs
+  remote_refs="$(git -C "$BARE_REMOTE" for-each-ref)"
+  if [ -n "$remote_refs" ]; then
+    echo "  expected nothing pushed to the remote, got refs:"
+    echo "$remote_refs" | sed 's/^/    /'
+    result=1
+  fi
+  if git -C "$SCRATCH_REPO" show-ref --verify --quiet "refs/heads/vocoder/translate-HEAD"; then
+    echo "  expected no vocoder/translate-HEAD branch to have been created"
+    result=1
+  fi
+  if [ -s "$call_log" ]; then
+    echo "  expected no gh invocation, got:"
+    sed 's/^/    /' "$call_log"
+    result=1
+  fi
+
+  rm -f "$call_log" "$stderr_file"
+  cleanup_scratch_repo
+  return "$result"
+}
+
+# On a pull_request event the runner knows the real branch even though the
+# checkout is detached; the action passes it in as VOCODER_TARGET_BRANCH.
+test_supplied_target_branch_wins_over_detached_head() {
+  setup_scratch_repo
+  local call_log
+  call_log="$(mktemp)"
+
+  git -C "$SCRATCH_REPO" checkout --quiet --detach HEAD
+
+  cli_wrote "locales/fr.json" '{"hello":"Bonjour"}'
+  write_result_file '{"status":"complete","apps":[{"writtenPaths":["locales/fr.json"],"commitConfig":{"commitMode":"pr","autoMergePRs":false}}]}'
+
+  run_sut "CALL_LOG=$call_log" "FAKE_GH_PR_COUNT=0" \
+    "VOCODER_TARGET_BRANCH=feature-work" >/dev/null 2>&1
+
+  local result=0
+  assert_contains "--base feature-work" "$call_log" || result=1
+  assert_contains "--head vocoder/translate-feature-work" "$call_log" || result=1
+  assert_not_contains "translate-HEAD" "$call_log" || result=1
+
+  rm -f "$call_log"
+  cleanup_scratch_repo
+  return "$result"
+}
+
+# commitMode is per-app in the schema, but delivery is one git operation over
+# the whole staged tree. The old `| first` silently delivered every app the way
+# whichever app sorted first wanted.
+test_disagreeing_commit_modes_refuse_and_push_nothing() {
+  setup_scratch_repo
+  local call_log stderr_file
+  call_log="$(mktemp)"
+  stderr_file="$(mktemp)"
+
+  cli_wrote "apps/web/locales/fr.json" '{"a":"1"}' "apps/admin/locales/fr.json" '{"b":"2"}'
+  write_result_file '{"status":"complete","apps":[{"appDir":"apps/web","writtenPaths":["apps/web/locales/fr.json"],"commitConfig":{"commitMode":"direct"}},{"appDir":"apps/admin","writtenPaths":["apps/admin/locales/fr.json"],"commitConfig":{"commitMode":"pr"}}]}'
+
+  local exit_code=0
+  run_sut "CALL_LOG=$call_log" "FAKE_GH_PR_COUNT=0" >/dev/null 2>"$stderr_file" || exit_code=$?
+
+  local result=0
+  if [ "$exit_code" -eq 0 ]; then
+    echo "  expected a non-zero exit, got 0"
+    result=1
+  fi
+  if ! grep -qF "commitMode" "$stderr_file"; then
+    echo "  expected the error to name the field in disagreement, got:"
+    sed 's/^/    /' "$stderr_file"
+    result=1
+  fi
+  local remote_refs
+  remote_refs="$(git -C "$BARE_REMOTE" for-each-ref)"
+  if [ -n "$remote_refs" ]; then
+    echo "  expected nothing pushed to the remote, got refs:"
+    echo "$remote_refs" | sed 's/^/    /'
+    result=1
+  fi
+
+  rm -f "$call_log" "$stderr_file"
+  cleanup_scratch_repo
+  return "$result"
+}
+
+test_agreeing_commit_modes_deliver_normally() {
+  setup_scratch_repo
+  local call_log
+  call_log="$(mktemp)"
+
+  cli_wrote "apps/web/locales/fr.json" '{"a":"1"}' "apps/admin/locales/fr.json" '{"b":"2"}'
+  write_result_file '{"status":"complete","apps":[{"appDir":"apps/web","writtenPaths":["apps/web/locales/fr.json"],"commitConfig":{"commitMode":"direct","skipCiOnDirectCommit":true}},{"appDir":"apps/admin","writtenPaths":["apps/admin/locales/fr.json"],"commitConfig":{"commitMode":"direct","skipCiOnDirectCommit":true}}]}'
+
+  local exit_code=0
+  run_sut "CALL_LOG=$call_log" >/dev/null 2>&1 || exit_code=$?
+
+  local result=0
+  if [ "$exit_code" -ne 0 ]; then
+    echo "  expected exit 0, got $exit_code"
+    result=1
+  fi
+  local pushed
+  if ! pushed="$(git -C "$BARE_REMOTE" ls-tree -r --name-only "$SCRATCH_BRANCH" 2>/dev/null)"; then
+    echo "  expected the direct push to have landed on the remote"
+    result=1
+  else
+    if ! echo "$pushed" | grep -qF "apps/web/locales/fr.json"; then
+      echo "  expected apps/web's locale file in the pushed tree, got:"
+      echo "$pushed" | sed 's/^/    /'
+      result=1
+    fi
+    if ! echo "$pushed" | grep -qF "apps/admin/locales/fr.json"; then
+      echo "  expected apps/admin's locale file in the pushed tree, got:"
+      echo "$pushed" | sed 's/^/    /'
+      result=1
+    fi
+  fi
+
+  rm -f "$call_log"
+  cleanup_scratch_repo
+  return "$result"
+}
+
 test_stages_the_paths_the_cli_reported_writing() {
   setup_scratch_repo
   local call_log
@@ -572,6 +720,10 @@ test_hands_off_to_dispatch_with_correct_branch_and_auto_merge() {
 
 run_test "returns early when no result file exists" test_returns_early_when_no_result_file_exists
 run_test "returns early when status is not complete" test_returns_early_when_status_is_not_complete
+run_test "refuses to deliver from a detached HEAD when no branch name was supplied" test_detached_head_refuses_and_pushes_nothing
+run_test "delivers to the branch the runner supplied, not the detached HEAD" test_supplied_target_branch_wins_over_detached_head
+run_test "refuses when apps disagree about commitMode, instead of using the first app's" test_disagreeing_commit_modes_refuse_and_push_nothing
+run_test "proceeds when every app agrees on commitMode" test_agreeing_commit_modes_deliver_normally
 run_test "stages the paths the CLI reported writing" test_stages_the_paths_the_cli_reported_writing
 run_test "stages loader.ts and never the loader.js key the server sent" test_stages_loader_ts_and_never_the_loader_js_key
 run_test "stages the deletion of a loader.js superseded by loader.ts" test_stages_the_deletion_of_a_superseded_loader_js

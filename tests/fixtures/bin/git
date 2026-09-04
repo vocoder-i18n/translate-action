@@ -1,8 +1,22 @@
 #!/usr/bin/env bash
-# Stands in for the real `git` in tests: records every invocation to
-# $CALL_LOG instead of touching a repository, and always succeeds. Nothing
-# under test reads git's output, so no subcommand needs canned stdout.
+# Stands in for the real `git` in tests: records every invocation to $CALL_LOG
+# instead of touching a repository.
+#
+# Succeeds by default. Set FAKE_GIT_FAIL to a space-separated list of
+# subcommands that should fail instead — e.g. FAKE_GIT_FAIL="push" makes every
+# `git push` exit 1 with a rejection message on stderr. Without this a fixture
+# that always exits 0 cannot express a rejected push or a bad refspec, so no
+# test could catch the script continuing past one.
 set -euo pipefail
 
 echo "git $*" >> "${CALL_LOG:?CALL_LOG must be set by the test}"
+
+SUBCOMMAND="${1:-}"
+for failing in ${FAKE_GIT_FAIL:-}; do
+  if [ "$SUBCOMMAND" = "$failing" ]; then
+    echo "fake git: '$SUBCOMMAND' failed (FAKE_GIT_FAIL)" >&2
+    exit 1
+  fi
+done
+
 exit 0
