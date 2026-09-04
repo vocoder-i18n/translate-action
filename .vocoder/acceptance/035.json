@@ -13,8 +13,8 @@
 		},
 		{
 			"id": "AC3",
-			"statement": "GIVEN a result file with a non-empty localeFileTree for one or more apps WHEN commit-locale-files.sh runs THEN every file in the tree is written to disk with its exact content at its exact relative path, including creating any needed parent directories, and staged via git add",
-			"test": "tests/commit-locale-files.test.sh::writes every file in localeFileTree at its exact path with exact content and stages it via git add"
+			"statement": "GIVEN a result file naming the paths the CLI wrote WHEN commit-locale-files.sh runs THEN every one of those paths is staged via git add. Amended by VOC-115: the original criterion had this script write the tree to disk and stage its keys, which is the bug VOC-115 removes \u2014 the CLI is now the only writer and this script stages what it reports.",
+			"test": "tests/commit-locale-files.test.sh::stages the paths the CLI reported writing"
 		},
 		{
 			"id": "AC4",
