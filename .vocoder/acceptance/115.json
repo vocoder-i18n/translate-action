@@ -1,0 +1,71 @@
+{
+	"ticket": "VOC-115",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "commit-locale-files.sh stages the paths the CLI reported writing, rather than re-writing the locale tree itself. The CLI is now the only writer",
+			"test": "tests/commit-locale-files.test.sh::stages the paths the CLI reported writing"
+		},
+		{
+			"id": "AC2",
+			"statement": "GIVEN a TypeScript project, whose CLI turned the server's locales/loader.js key into a typed locales/loader.ts, WHEN the script runs THEN locales/loader.ts is staged, locales/loader.js is not staged, and the script does not re-create the .js on disk. This is the headline bug: every TypeScript customer committed an untyped loader.js while the loader.ts their app imports went unstaged",
+			"test": "tests/commit-locale-files.test.sh::stages loader.ts and never the loader.js key the server sent"
+		},
+		{
+			"id": "AC3",
+			"statement": "A loader.js superseded by loader.ts is staged as a deletion, so it leaves the repository rather than staying committed forever",
+			"test": "tests/commit-locale-files.test.sh::stages the deletion of a loader.js superseded by loader.ts"
+		},
+		{
+			"id": "AC4",
+			"statement": "A removedPaths entry git never tracked is skipped rather than failing the pathspec match. `git add` on a path that is neither on disk nor in the index is a fatal error, and under `set -euo pipefail` that would take the whole run down",
+			"test": "tests/commit-locale-files.test.sh::ignores a removed path git never tracked instead of failing the run"
+		},
+		{
+			"id": "AC5",
+			"statement": "Paths containing a space or an apostrophe are staged correctly. The previous pipeline was `jq ... | xargs git add --`; xargs splits on whitespace and interprets quotes, so `my locales/fr.json` failed the pathspec match and `q/it's.json` was an unterminated quote — while the write loop, which used `while IFS= read -r`, had handled both fine. Staging is NUL-delimited now",
+			"test": "tests/commit-locale-files.test.sh::stages paths containing spaces and quotes"
+		},
+		{
+			"id": "AC6",
+			"statement": "A result file that is not valid JSON exits non-zero with an ::error:: annotation. Previously the keys query ended in `2>/dev/null`, so malformed JSON read as \"nothing to do\": the job finished with a green check, no translations delivered, having already paid for them",
+			"test": "tests/commit-locale-files.test.sh::a malformed result file fails loudly instead of reading as nothing to do"
+		},
+		{
+			"id": "AC7",
+			"statement": "Locale files the CLI flagged as orphaned — on disk, no longer a target — are surfaced as ::warning:: annotations naming the file. The CLI's warning was previously invisible in CI, so a dropped locale left its stale .json committed with nothing anywhere to say so. They are surfaced, never deleted",
+			"test": "tests/commit-locale-files.test.sh::orphaned locale files surface as CI annotations"
+		},
+		{
+			"id": "AC8",
+			"statement": "A result produced by an older pinned CLI, which carries no writtenPaths, falls back to staging the localeFileTree keys. That is the pre-existing behaviour and remains correct for any project that is not TypeScript, so pinning an old CLI degrades rather than breaks",
+			"test": "tests/commit-locale-files.test.sh::falls back to localeFileTree keys when an older CLI reported no writtenPaths"
+		},
+		{
+			"id": "AC9",
+			"statement": "If the CLI reports a path that is not on disk, the script exits non-zero and names the offending path, pushing nothing. That state means the two halves of the pipeline disagree — the exact class of bug this change removes — and git would otherwise report it as an opaque \"pathspec did not match\"",
+			"test": "tests/commit-locale-files.test.sh::fails loudly, naming the path, when the CLI reports a file it did not write"
+		},
+		{
+			"id": "AC10",
+			"statement": "The existing behaviour this change must not regress still holds: an unchanged tree exits before dispatch without pushing, a server-provided commitMode still overrides the action's own input, and the hand-off to commit-dispatch.sh still carries the correct target branch, auto-merge and skip-ci values",
+			"test": "tests/commit-locale-files.test.sh::exits before dispatch when written content matches what is already committed"
+		},
+		{
+			"id": "AC11",
+			"statement": "The new tests fail against the script this change replaces, so they encode the fix rather than describing the file",
+			"evidence": {
+				"type": "manual",
+				"ref": "Mutation check run before committing: `git checkout HEAD -- scripts/commit-locale-files.sh` restored the pre-fix script and the suite reported `4 passed, 10 failed`. The four that still passed are the two early-return cases (no result file, status not complete), the older-CLI fallback — which is by definition the old behaviour — and the unchanged-content short-circuit, none of which this change alters. Every criterion asserting new behaviour failed. The script was restored and the suite re-run at 14 passed, 0 failed."
+			}
+		},
+		{
+			"id": "AC12",
+			"statement": "VOC-35's acceptance record was amended rather than left contradicting the code. Its AC3 asserted that this script writes every file in localeFileTree to disk and stages its keys — the behaviour VOC-115 deliberately removes",
+			"evidence": {
+				"type": "manual",
+				"ref": ".vocoder/acceptance/035.json AC3 now states the staging criterion and points at the replacement test, with an inline note that VOC-115 amended it and why. Per the acceptance-record contract a record is immutable once merged unless the ticket's behaviour changed, in which case the amendment ships with the change that caused it — which is this one. The other five VOC-35 criteria are untouched and still resolve against tests that exist and pass."
+			}
+		}
+	]
+}
