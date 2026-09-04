@@ -1,0 +1,41 @@
+{
+	"ticket": "VOC-117",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "No `run:` body in action.yml interpolates a `${{ }}` expression. GitHub substitutes expressions into the script text before bash is invoked, so an input value becomes part of the program rather than an argument to it; every value now reaches the shell through `env:`, where it arrives as data and is quoted at the point of use",
+			"test": "tests/action-yml.test.sh::no run: body interpolates a GitHub expression"
+		},
+		{
+			"id": "AC2",
+			"statement": "The `cli-version` input specifically — the one the ticket names — is bound to CLI_VERSION in the translate step's `env:` block and read from there, quoted, rather than spliced into the npx command",
+			"test": "tests/action-yml.test.sh::cli-version reaches the shell as a quoted environment variable"
+		},
+		{
+			"id": "AC3",
+			"statement": "The commit step resolves its script through the runner-provided $GITHUB_ACTION_PATH environment variable instead of the ${{ github.action_path }} expression, so the no-expression rule holds for every step rather than admitting an exception",
+			"test": "tests/action-yml.test.sh::the commit step resolves its script via GITHUB_ACTION_PATH, not an expression"
+		},
+		{
+			"id": "AC4",
+			"statement": "The check is structural, not a spot assertion on the two steps that exist today: the test extracts every `run:` body — block form and inline form both — so a step added later cannot reintroduce the pattern unnoticed. The extractor is itself proven against a fixture with a planted expression in each form, since an extractor that silently matched nothing would let AC1 pass against a file full of violations",
+			"test": "tests/action-yml.test.sh::the extractor detects a planted expression in both block and inline run bodies"
+		},
+		{
+			"id": "AC5",
+			"statement": "The tests fail against the action.yml this change replaces, so they encode the fix rather than describing the file",
+			"evidence": {
+				"type": "manual",
+				"ref": "Mutation check run before committing: `git stash push action.yml` restored the pre-fix file and `bash tests/action-yml.test.sh` reported `1 passed, 3 failed`, naming both offending lines — `npx --yes @vocoder/cli@${{ inputs.cli-version }} translate` and `${{ github.action_path }}/scripts/commit-locale-files.sh`. AC4's extractor self-check was the one case that still passed, which is correct: it tests the extractor against its own fixture, not against action.yml. The file was restored and the suite re-run eight consecutive times, 4 passed / 0 failed each time, confirming the result is deterministic and not an artifact of the stash sequence."
+			}
+		},
+		{
+			"id": "AC6",
+			"statement": "The second half of this ticket — nothing runs the action's test suite — was already resolved on main, so this change lands under a gate that actually executes it",
+			"evidence": {
+				"type": "manual",
+				"ref": "main at c0db31c contains 85f5afb \"feat: add scripts/verify.sh gate, disclosure scan, and CI (#6)\", which merged the branch chore/verify-gate-and-ci named in the ticket. .github/workflows/verify.yml runs ./scripts/verify.sh on every pull_request and on push to main with fetch-depth: 0. tests/run.sh globs tests/*.test.sh, so tests/action-yml.test.sh is picked up with no registration step."
+			}
+		}
+	]
+}
